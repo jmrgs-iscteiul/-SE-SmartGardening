@@ -1,6 +1,7 @@
 /*
 Liquid flow rate sensor -DIYhacking.com Arvind Sanjeev
  */
+
 #include "DHT.h"
 #include <TimeLib.h>
 #include <avr/io.h>
@@ -50,15 +51,18 @@ void setup(){
   DDRB = (1 <<DDB0);
   // Inicialização do light DHT water
   DDRD = (1 << DDD5) | (1 << DDD4);
-  //LIMPAR O PINO D2 COM CIF
+  //LIMPAR O PINO D2
   DDRD &= ~(1 << DDD2);
   //LIGAR PULLUP RESISTOR
   PORTD |= (1 << PORTD2);
   
-  EICRA |= (1 << ISC01);    // set INT0 to trigger on ANY logic change
-  EIMSK |= (1 << INT0);     // Turns on INT0
-
-  sei();                    // turn on interrupts
+  // set INT0 to trigger on FALLING
+  EICRA |= (1 << ISC01);
+  //Turns on INT0
+  EIMSK |= (1 << INT0);
+  
+  //turn on interrupts
+  sei();                   
   
 }
 
@@ -89,6 +93,7 @@ void drain()
 
   if ((millis() - oldTime) > 1000)   // Only process counters once per second
   {
+    //stop interrupts to TX data
     cli();
     
     flowRate = ((1000.0 / (millis() - oldTime)) * pulseCount) / calibrationFactor;
@@ -101,7 +106,7 @@ void drain()
     // Reset the pulse counter so we can start incrementing again
     pulseCount = 0;
 
-    // Enable the interrupt again now that we've finished sending output
+    // Enable the interrupt again
     sei();
     }
 
