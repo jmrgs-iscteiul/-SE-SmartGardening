@@ -1,4 +1,4 @@
-# -SE-SmartGardening
+# SE SmartGardening
 
 Projecto de SE 2017/2018 METI @ ISCTE-IUL
 
