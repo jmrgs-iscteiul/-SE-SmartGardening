@@ -3,17 +3,11 @@ Liquid flow rate sensor -DIYhacking.com Arvind Sanjeev
  */
 #include "DHT.h"
 #include <TimeLib.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
 
-#define FAN 8
-//#define LIGHT 5
-#define WATER 4
 #define DHTPIN 3
-
 #define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
-
-byte statusLed    = 13;
-byte sensorInterrupt = 0;  // 0 = digital pin 2
-byte sensorPin       = 2;
 
 // The hall-effect flow sensor outputs approximately 4.5 pulses per second per
 // litre/minute of flow.
@@ -34,28 +28,17 @@ unsigned long totalMilliLitres;
 
 float flowRate;
 unsigned int flowMilliLitres;
-
-
 unsigned long oldTime;
 
 DHT dht(DHTPIN, DHTTYPE);
 
 void setup(){
-
-  
   // Initialize a serial connection for reporting values to the host
   Serial.begin(9600);
 
   dht.begin();
 
-  setTime(9,30,00,27,05,2018);
-
-  pinMode(FAN, OUTPUT);
-  pinMode(statusLed, OUTPUT);
-  digitalWrite(statusLed, HIGH); 
-
-  pinMode(sensorPin, INPUT);
-  digitalWrite(sensorPin, HIGH);
+  setTime(9,30,00,27,05,2018); 
 
   pulseCount        = 0;
   flowRate          = 0.0;
@@ -63,10 +46,20 @@ void setup(){
   totalMilliLitres  = 0;
   oldTime           = 0;
 
-  pinMode(WATER, OUTPUT);
-  attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
+  // Inicialização do FAN
+  DDRB = (1 <<DDB0);
+  // Inicialização do light DHT water
+  DDRD = (1 << DDD5) | (1 << DDD4);
+  //LIMPAR O PINO D2 COM CIF
+  DDRD &= ~(1 << DDD2);
+  //LIGAR PULLUP RESISTOR
+  PORTD |= (1 << PORTD2);
+  
+  EICRA |= (1 << ISC01);    // set INT0 to trigger on ANY logic change
+  EIMSK |= (1 << INT0);     // Turns on INT0
 
-  DDRB = (1 << DDB5);
+  sei();                    // turn on interrupts
+  
 }
 
 int full = 0;
@@ -74,16 +67,17 @@ long water_t = 0;
 
 void light(){
   if(hour() >= set || hour() <= rise-1){
-        PORTB = (0 << PORTD5);
+        PORTD = (0 << PORTD5);
   } else {
-        PORTB = (1 << PORTD5);
+        PORTD = (1 << PORTD5);
      }
 }
 
 void flood(){
   //1800 = 30 min
   if(water_t + WaterTiming <= now() && !full){
-      digitalWrite(WATER, LOW);
+      //digitalWrite(WATER, LOW);
+    PORTD = (0<<DDD4);
       Serial.println("\nTank Flooded!");
       full=1;
   }
@@ -95,7 +89,8 @@ void drain()
 
   if ((millis() - oldTime) > 1000)   // Only process counters once per second
   {
-    detachInterrupt(sensorInterrupt);
+    cli();
+    
     flowRate = ((1000.0 / (millis() - oldTime)) * pulseCount) / calibrationFactor;
     oldTime = millis();
     flowMilliLitres = (flowRate / 60) * 1000;
@@ -107,13 +102,11 @@ void drain()
     pulseCount = 0;
 
     // Enable the interrupt again now that we've finished sending output
-    attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
-  }
-
-  //Serial.println(flowMilliLitres);
+    sei();
+    }
 
   if(flowMilliLitres > 60 && full){
-      digitalWrite(WATER, HIGH);
+      PORTD=(1<<PORTD4);    
       water_t = now();
       Serial.println("\nTank drained!");
       full = 0;
@@ -139,12 +132,12 @@ void tempControl() {
    Serial.print("%");
 
  if(h > 85 || t > 32){
-    digitalWrite(FAN,HIGH);
+    PORTB = (1 << PORTB0);
     Serial.println("Fan ON!");
   } 
  
  if(h <= 75 && t <= 30){
-    digitalWrite(FAN,LOW);
+    PORTB = (0 << PORTB0);
     Serial.println("Fan OFF!");
   }
 }
@@ -185,7 +178,7 @@ void printDigits(int digits){
 /*
 Insterrupt Service Routine
  */
-void pulseCounter()
+ISR(PCINT0_vect)
 {
   // Increment the pulse counter
   pulseCount++;
@@ -198,12 +191,14 @@ void readData(){
     data = Serial.readString();
   
     if(data == "fan on"){ 
-      digitalWrite(FAN,HIGH);
+      //  digitalWrite(FAN,HIGH);
+      PORTB = (1 << PORTB0);
       Serial.println("Fan ON!");
       }
 
     else if(data == "fan off"){ 
-      digitalWrite(FAN,LOW);
+      //  digitalWrite(FAN,LOW);
+      PORTB = (0 << PORTB0);
       Serial.println("Fan OFF!");
       }
 
